@@ -154,7 +154,7 @@ Password: ebT6%rh36K1Uh8RH
 
 ---
 
-## Solution
+## Result
 
 **Flag:**
 ```
@@ -232,4 +232,4 @@ Use DNS to bypass IP filtering
 ---
 
 **Duration:** 30 minutes  
-**Date:** October 25, 2024
+**Date:** October 25, 2025

@@ -12,20 +12,20 @@
 
 ## Initial Reconnaissance
 
-### 1. Truy cập challenge
+### 1. Access the challenge
 
-Challenge cung cấp Docker spawned và source code. Khi khởi động, nhận được địa chỉ IP và port để truy cập:
+The challenge provides a spawned Docker instance and the source code. On start, you receive an IP and port to access the web app:
 
 ![Start](./idor_images/Start.png)
 
-Giao diện ban đầu là trang đăng nhập với 2 chức năng chính: **Login** và **Create Account**.
+The initial interface is a login page with two main actions: **Login** and **Create Account**.
 
 ![Homepage](./idor_images/Homepage.png)
 
-### 2. Thu thập thông tin ban đầu
+### 2. First information gathering
 
-- View page source không có thông tin hữu ích
-- Sử dụng `gobuster` để quét thư mục/endpoints:
+- Viewing the page source reveals nothing useful
+- Use `gobuster` to enumerate directories/endpoints:
 
 ```bash
 gobuster dir -u http://209.38.234.15:31546 -w directory-list-lowercase-2.3-medium.txt -x txt,log,html,js,php,py
@@ -33,89 +33,89 @@ gobuster dir -u http://209.38.234.15:31546 -w directory-list-lowercase-2.3-mediu
 
 ![Gobuster](./idor_images/gobuster.png)
 
-Không phát hiện gì đặc biệt. Có vẻ cần tạo tài khoản và đăng nhập để khám phá thêm.
+Nothing stands out. It seems we need to create an account and log in to explore further.
 
 ---
 
 ## Post-Authentication Analysis
 
-### 1. Đăng nhập và khám phá Dashboard
+### 1. Log in and explore the Dashboard
 
-Sau khi tạo tài khoản và đăng nhập, tôi được đưa đến trang **Dashboard**. Ứng dụng cho phép người dùng quản lý các ghi chú (gọi là "Chronicles").
+After creating an account and logging in, I’m taken to the **Dashboard**. The app lets users manage notes (called "Chronicles").
 
-Tại đây có danh sách **"Public Chronicles"**.
+There is a list of **Public Chronicles**.
 
 ![Page1](./idor_images/page1.png)
 
-### 2. Phân tích chức năng
+### 2. Feature analysis
 
-**URL Public Notes:**
+**Public notes URL:**
 ```
 http://209.38.234.15:31546/public-notes?page=1
 ```
 
-- Thử SQL Injection ở tham số `page` với các payload đơn giản (`'`, `1=1`, v.v.) → không có phản ứng
+- Tried simple SQLi payloads on the `page` parameter (`'`, `1=1`, etc.) → no effect
 
-**Tạo Chronicle:**
-- Form gồm "Title" và "Content"
-- Thử payload XSS cơ bản vào cả hai trường → đã bị filter
+**Create Chronicle:**
+- Form has "Title" and "Content"
+- Basic XSS payloads in both fields are filtered
 
 ---
 
 ## IDOR Vulnerability Discovery
 
-### 1. Phát hiện điểm khai thác
+### 1. Finding the pivot
 
-Sau khi tạo note thành công, trình duyệt chuyển hướng đến URL:
+After creating a note successfully, the browser redirects to:
 ```
 http://209.38.234.15:31546/note?id=211
 ```
 
 ![211](./idor_images/211.png)
 
-Tham số `id` trong URL → nghi ngờ **IDOR vulnerability**.
+The `id` parameter in the URL suggests a potential **IDOR vulnerability**.
 
-### 2. Kiểm tra lỗ hổng
+### 2. Validating the issue
 
-**Thử với `id=1`:**
+**Try `id=1`:**
 ```
 http://209.38.234.15:31546/note?id=1
 ```
 
 ![1](./idor_images/1.png)
 
-→ Trả về public note (không có gì đặc biệt)
+→ Returns a public note (nothing special)
 
-**Thử với `id=2`:**
+**Try `id=2`:**
 ```
 http://209.38.234.15:31546/note?id=2
 ```
 
 ![2](./idor_images/2.png)
-→ **Thành công!** Lấy được private note của user khác mà lẽ ra không có quyền xem.
+→ **Success!** We can read another user’s private note without authorization.
 
-**Kết luận:** Bất kỳ user nào đã đăng nhập đều có thể đọc tất cả note trong hệ thống, chỉ cần đoán đúng `id`.
+**Conclusion:** Any authenticated user can read any note by guessing the `id`.
 
 ---
 
 ## Exploitation
 
-### Khai thác với Burp Suite Intruder
+### Exploit using Burp Suite Intruder
 
-Vì note của tôi có `id=211`, nên có ít nhất 211 note trong database. Flag có thể nằm trong các private note từ `id=1` đến `id=210`.
+Since my note has `id=211`, there are at least 211 notes in the database. The flag likely resides in private notes between `id=1` and `id=210`.
 
-**Các bước:**
+**Steps:**
 
-1. **Bắt request** `GET /api/notes/211` trong Burp Suite, gửi sang tab **Intruder**
+1. Capture the request `GET /api/notes/211` in Burp Suite and send it to **Intruder**
 
-> **Chú ý:** Phải bắt `GET /api/notes/211`, không được bắt gọi `GET /note?id=211`, vì `/api/notes/211` mới là gọi hiển thị note.
+> Note: Capture `GET /api/notes/211`, not `GET /note?id=211`. The `/api/notes/211` endpoint actually fetches the note content.
 
 ![intercept](./idor_images/intercept.png)
 
-2. **Tab Positions:**
-   - Clear tất cả vị trí
-   - Chọn số `211` trong `/api/notes/211` và nhấn "Add §"
-   - Request trông như sau:
+2. **Positions tab:**
+   - Clear all positions
+   - Select `211` in `/api/notes/211` and click "Add §"
+   - The request should look like:
 
 ```http
 GET /api/notes/§211§ HTTP/1.1
@@ -123,49 +123,49 @@ Host: 209.38.234.15:31546
 ... (các header khác)
 ```
 
-3. **Tab Payloads:**
+3. **Payloads tab:**
    - Payload type: **Numbers**
    - From: **1**
    - To: **211**
    - Step: **1**
 
-4. Nhấn **Start Attack** và đợi quá trình khai thác hoàn thành.
+4. Click **Start Attack** and wait for the sweep to finish.
 
 ![intruder](./idor_images/intruder.png)
 
-### Phát hiện Flag
+### Finding the flag
 
-Kiểm tra toàn bộ 211 gói tin vừa được bắt. Sử dụng mũi tên di chuyển lên xuống cho nhanh, sẽ phát hiện flag nằm ở 1 trong 211 gói tin này. Flag sẽ nằm random trong 1 gói nào đó - điều này mỗi IP sẽ khác nhau, vị trí flag sẽ không cố định.
+Inspect all 211 responses. Use the up/down navigation to skim quickly—you’ll find the flag in one of them. The exact `id` varies per deployment/IP, so the position is not fixed.
 
 ![flag](./idor_images/flag.png)
 ---
 
-## Solution
+## Result
 
 **Flag:**
 ```
 HTB{br0k3n_n4m3s_r3v3rs3d_4nd_r3st0r3d_<hashcode>}
 ```
 
-Phần hashcode mỗi người khi dùng máy có IP khác nhau sẽ cho ra 1 hash code khác nhau. Ví dụ của tôi là:
+The `<hashcode>` differs per solver/environment (e.g., based on IP). My instance produced:
 
 ```
 HTB{br0k3n_n4m3s_r3v3rs3d_4nd_r3st0r3d_3c9593bcde968834f7cab3777de789da}
 ```
 
-Đây là một cách hay của HTB để chống copy flag, đảm bảo tính công bằng cho người chơi.
+This is a neat HTB mechanism to prevent flag sharing and keep things fair.
 
 ---
 
 ## Key Takeaways
 
-### Bài học rút ra:
+### Lessons learned
 
-1. **Luôn kiểm tra tham số `id` trên URL** - đặc biệt sau khi tạo tài nguyên mới
-2. **IDOR xảy ra khi** server cho phép truy cập tài nguyên chỉ dựa vào ID mà không kiểm tra quyền
-3. **Cách phòng chống:** Server phải xác thực user hiện tại có quyền truy cập tài nguyên hay không
+1. **Always test URL `id` parameters**—especially after creating new resources
+2. **IDOR occurs when** the server exposes objects by ID without authorization checks
+3. **Prevention:** The server must verify the current user’s authorization for the resource
 
-### Tools & References:
+### Tools & references
 
 - [Burp Suite Documentation](https://portswigger.net/burp/documentation)
 - [OWASP: IDOR](https://owasp.org/www-community/vulnerabilities/Insecure_Direct_Object_Reference)
@@ -173,5 +173,5 @@ HTB{br0k3n_n4m3s_r3v3rs3d_4nd_r3st0r3d_3c9593bcde968834f7cab3777de789da}
 
 ---
 
-**Duration:** 30 phút  
-**Date:** 25/10/2024
+**Duration:** 30 minutes  
+**Date:** 2025-10-25
