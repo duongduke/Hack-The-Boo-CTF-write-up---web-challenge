@@ -120,7 +120,7 @@ Since my note has `id=211`, there are at least 211 notes in the database. The fl
 ```http
 GET /api/notes/§211§ HTTP/1.1
 Host: 209.38.234.15:31546
-... (các header khác)
+...
 ```
 
 3. **Payloads tab:**
