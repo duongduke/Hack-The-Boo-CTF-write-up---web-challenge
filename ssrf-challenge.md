@@ -211,25 +211,6 @@ This is a clever way by HTB to prevent flag copying and ensure fairness for play
 
 ---
 
-## Advanced Techniques
-
-### 1. Gopher Protocol (if supported):
-
-```bash
-gopher://127.0.0.1:6379/_FLUSHALL
-```
-
-### 2. DNS Rebinding:
-
-Use DNS to bypass IP filtering
-
-### 3. Protocol Wrappers:
-
-- `file://` - File access
-- `dict://` - Dictionary protocol
-- `ldap://` - LDAP protocol
-
----
 
 **Duration:** 30 minutes  
 **Date:** October 25, 2025
